@@ -142,6 +142,7 @@ const Index = () => {
                     <TableHead className="text-right">Balls</TableHead>
                     <TableHead className="text-right">Wickets</TableHead>
                     <TableHead className="text-right">Date</TableHead>
+                    <TableHead className="text-right">Season</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
