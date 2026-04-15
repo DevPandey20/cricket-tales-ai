@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IPL_TEAMS, getPlayerStats, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
+import { IPL_TEAMS, AVAILABLE_PLAYERS, getPlayerStats, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,18 +14,27 @@ const Index = () => {
   const [stats, setStats] = useState<MatchStat[] | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   const handlePredict = () => {
     if (!team1 || !team2 || !player.trim()) return;
     setLoading(true);
+    setNotFound(false);
     setTimeout(() => {
-      setStats(getPlayerStats(player));
+      const playerStats = getPlayerStats(player);
+      setStats(playerStats);
+      setNotFound(!playerStats);
       setPrediction(getPrediction(team1, team2, player));
       setLoading(false);
-    }, 1200);
+    }, 800);
   };
 
   const team2Options = IPL_TEAMS.filter((t) => t !== team1);
+
+  // Filter player suggestions
+  const suggestions = player.trim().length >= 2
+    ? AVAILABLE_PLAYERS.filter((p) => p.toLowerCase().includes(player.trim().toLowerCase()))
+    : [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,7 +48,7 @@ const Index = () => {
             IPL PREDICTOR
           </h1>
           <p className="mt-3 text-lg text-primary-foreground/80">
-            Pick two teams and a player — get AI-powered match & performance predictions
+            Real ball-by-ball stats from Cricsheet • Pick two teams and a player
           </p>
         </div>
       </div>
@@ -72,13 +81,27 @@ const Index = () => {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Name</label>
               <Input
                 placeholder="e.g. Virat Kohli, Jasprit Bumrah, Rohit Sharma..."
                 value={player}
                 onChange={(e) => setPlayer(e.target.value)}
               />
+              {suggestions.length > 0 && suggestions.length <= 8 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {suggestions.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                      onClick={() => setPlayer(s)}
+                    >
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <Button
               className="w-full text-lg font-semibold py-6 bg-secondary text-secondary-foreground hover:bg-secondary/90"
@@ -92,7 +115,7 @@ const Index = () => {
       </div>
 
       {/* Results */}
-      {stats && prediction && (
+      {prediction && (
         <div className="mx-auto max-w-3xl px-4 py-10 space-y-6">
           {/* Prediction Card */}
           <Card className="border-2 border-secondary/50 shadow-lg overflow-hidden">
@@ -107,18 +130,20 @@ const Index = () => {
                   {prediction.winProbability}% win probability
                 </Badge>
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-4">
-                <div className="text-center p-4 rounded-lg bg-muted">
-                  <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Runs</p>
-                  <p className="text-4xl font-bold mt-1">{prediction.playerRuns}</p>
-                  <p className="text-xs text-muted-foreground">{player}</p>
+              {!notFound && (
+                <div className="grid grid-cols-2 gap-4 pt-4">
+                  <div className="text-center p-4 rounded-lg bg-muted">
+                    <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Runs</p>
+                    <p className="text-4xl font-bold mt-1">{prediction.playerRuns}</p>
+                    <p className="text-xs text-muted-foreground">{player}</p>
+                  </div>
+                  <div className="text-center p-4 rounded-lg bg-muted">
+                    <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Wickets</p>
+                    <p className="text-4xl font-bold mt-1">{prediction.playerWickets}</p>
+                    <p className="text-xs text-muted-foreground">{player}</p>
+                  </div>
                 </div>
-                <div className="text-center p-4 rounded-lg bg-muted">
-                  <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Wickets</p>
-                  <p className="text-4xl font-bold mt-1">{prediction.playerWickets}</p>
-                  <p className="text-xs text-muted-foreground">{player}</p>
-                </div>
-              </div>
+              )}
               <div className="bg-muted/50 rounded-lg p-4 mt-2">
                 <p className="text-sm text-muted-foreground italic">{prediction.reasoning}</p>
               </div>
@@ -126,45 +151,57 @@ const Index = () => {
           </Card>
 
           {/* Last 5 Matches Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl tracking-wide">
-                {player.toUpperCase()} — LAST 5 MATCHES
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Match</TableHead>
-                    <TableHead>vs</TableHead>
-                    <TableHead className="text-right">Runs</TableHead>
-                    <TableHead className="text-right">Balls</TableHead>
-                    <TableHead className="text-right">Wickets</TableHead>
-                    <TableHead className="text-right">Date</TableHead>
-                    <TableHead className="text-right">Season</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.map((s, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">{s.match}</TableCell>
-                      <TableCell>{s.opponent}</TableCell>
-                      <TableCell className="text-right font-semibold">{s.runs}</TableCell>
-                      <TableCell className="text-right">{s.balls}</TableCell>
-                      <TableCell className="text-right font-semibold">{s.wickets}</TableCell>
-                      <TableCell className="text-right text-muted-foreground text-sm">{s.date}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={s.season === "IPL 2026" ? "default" : "secondary"} className="text-xs">
-                          {s.season}
-                        </Badge>
-                      </TableCell>
+          {stats && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl tracking-wide">
+                  {player.toUpperCase()} — LAST 5 IPL MATCHES
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">Real data from Cricsheet (cricsheet.org)</p>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Match</TableHead>
+                      <TableHead>vs</TableHead>
+                      <TableHead className="text-right">Runs</TableHead>
+                      <TableHead className="text-right">Balls</TableHead>
+                      <TableHead className="text-right">Wickets</TableHead>
+                      <TableHead className="text-right">Date</TableHead>
+                      <TableHead className="text-right">Season</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.map((s, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium text-xs">{s.match}</TableCell>
+                        <TableCell>{s.opponent}</TableCell>
+                        <TableCell className="text-right font-semibold">{s.runs}</TableCell>
+                        <TableCell className="text-right">{s.balls}</TableCell>
+                        <TableCell className="text-right font-semibold">{s.wickets}</TableCell>
+                        <TableCell className="text-right text-muted-foreground text-sm">{s.date}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={s.season === "IPL 2026" ? "default" : "secondary"} className="text-xs">
+                            {s.season}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {notFound && (
+            <Card className="border-destructive/50">
+              <CardContent className="pt-6">
+                <p className="text-destructive font-semibold">Player not found in database.</p>
+                <p className="text-sm text-muted-foreground mt-2">Available players: {AVAILABLE_PLAYERS.join(", ")}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>
