@@ -142,6 +142,7 @@ const Index = () => {
                     <TableHead className="text-right">Balls</TableHead>
                     <TableHead className="text-right">Wickets</TableHead>
                     <TableHead className="text-right">Date</TableHead>
+                    <TableHead className="text-right">Season</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -153,6 +154,11 @@ const Index = () => {
                       <TableCell className="text-right">{s.balls}</TableCell>
                       <TableCell className="text-right font-semibold">{s.wickets}</TableCell>
                       <TableCell className="text-right text-muted-foreground text-sm">{s.date}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={s.season === "IPL 2026" ? "default" : "secondary"} className="text-xs">
+                          {s.season}
+                        </Badge>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
