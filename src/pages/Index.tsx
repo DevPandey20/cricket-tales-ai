@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import PredictionCard from "@/components/PredictionCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Index = () => {
@@ -117,38 +118,13 @@ const Index = () => {
       {/* Results */}
       {prediction && (
         <div className="mx-auto max-w-3xl px-4 py-10 space-y-6">
-          {/* Prediction Card */}
-          <Card className="border-2 border-secondary/50 shadow-lg overflow-hidden">
-            <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4">
-              <h2 className="text-2xl font-bold text-primary-foreground tracking-wide">AI PREDICTION</h2>
-            </div>
-            <CardContent className="pt-6 space-y-4">
-              <div className="text-center space-y-2">
-                <p className="text-muted-foreground text-sm uppercase tracking-wider">Predicted Winner</p>
-                <h3 className="text-3xl font-bold text-accent">{prediction.winner}</h3>
-                <Badge variant="outline" className="text-base px-4 py-1">
-                  {prediction.winProbability}% win probability
-                </Badge>
-              </div>
-              {!notFound && (
-                <div className="grid grid-cols-2 gap-4 pt-4">
-                  <div className="text-center p-4 rounded-lg bg-muted">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Runs</p>
-                    <p className="text-4xl font-bold mt-1">{prediction.playerRuns}</p>
-                    <p className="text-xs text-muted-foreground">{player}</p>
-                  </div>
-                  <div className="text-center p-4 rounded-lg bg-muted">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Wickets</p>
-                    <p className="text-4xl font-bold mt-1">{prediction.playerWickets}</p>
-                    <p className="text-xs text-muted-foreground">{player}</p>
-                  </div>
-                </div>
-              )}
-              <div className="bg-muted/50 rounded-lg p-4 mt-2">
-                <p className="text-sm text-muted-foreground italic">{prediction.reasoning}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <PredictionCard
+            prediction={prediction}
+            team1={team1}
+            team2={team2}
+            player={player}
+            notFound={notFound}
+          />
 
           {/* Last 5 Matches Table */}
           {stats && (
