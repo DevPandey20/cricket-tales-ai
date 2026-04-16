@@ -16,15 +16,6 @@ export interface Prediction {
   playerWickets: number;
   confidence: number;
   reasoning: string;
-  tossWinner: string;
-  tossDecision: "bat" | "bowl";
-  playerOfTheMatch: string;
-  topScorerTeam1: { name: string; runs: number };
-  topScorerTeam2: { name: string; runs: number };
-  topWicketTakerTeam1: { name: string; wickets: number };
-  topWicketTakerTeam2: { name: string; wickets: number };
-  predictedScoreTeam1: number;
-  predictedScoreTeam2: number;
 }
 
 export const IPL_TEAMS = [
