@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IPL_TEAMS, AVAILABLE_PLAYERS, getPlayerStats, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
+import { IPL_TEAMS, AVAILABLE_PLAYERS, IPL_VENUES, getPlayerStats, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const Index = () => {
   const [team1, setTeam1] = useState("");
   const [team2, setTeam2] = useState("");
+  const [venue, setVenue] = useState("");
   const [player, setPlayer] = useState("");
   const [stats, setStats] = useState<MatchStat[] | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
@@ -17,14 +18,14 @@ const Index = () => {
   const [notFound, setNotFound] = useState(false);
 
   const handlePredict = () => {
-    if (!team1 || !team2 || !player.trim()) return;
+    if (!team1 || !team2 || !venue || !player.trim()) return;
     setLoading(true);
     setNotFound(false);
     setTimeout(() => {
       const playerStats = getPlayerStats(player);
       setStats(playerStats);
       setNotFound(!playerStats);
-      setPrediction(getPrediction(team1, team2, player));
+      setPrediction(getPrediction(team1, team2, player, venue));
       setLoading(false);
     }, 800);
   };
@@ -48,7 +49,7 @@ const Index = () => {
             IPL PREDICTOR
           </h1>
           <p className="mt-3 text-lg text-primary-foreground/80">
-            Real ball-by-ball stats from Cricsheet • Pick two teams and a player
+            Real ball-by-ball stats from Cricsheet • Venue, form & H2H factored in
           </p>
         </div>
       </div>
@@ -81,6 +82,17 @@ const Index = () => {
                 </Select>
               </div>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Venue</label>
+              <Select value={venue} onValueChange={setVenue}>
+                <SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger>
+                <SelectContent>
+                  {IPL_VENUES.map((v) => (
+                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2 relative">
               <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Name</label>
               <Input
@@ -106,7 +118,7 @@ const Index = () => {
             <Button
               className="w-full text-lg font-semibold py-6 bg-secondary text-secondary-foreground hover:bg-secondary/90"
               onClick={handlePredict}
-              disabled={!team1 || !team2 || !player.trim() || loading}
+              disabled={!team1 || !team2 || !venue || !player.trim() || loading}
             >
               {loading ? "Analyzing..." : "🏏 Predict Match"}
             </Button>
@@ -126,9 +138,14 @@ const Index = () => {
               <div className="text-center space-y-2">
                 <p className="text-muted-foreground text-sm uppercase tracking-wider">Predicted Winner</p>
                 <h3 className="text-3xl font-bold text-accent">{prediction.winner}</h3>
-                <Badge variant="outline" className="text-base px-4 py-1">
-                  {prediction.winProbability}% win probability
-                </Badge>
+                <div className="flex justify-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-base px-4 py-1">
+                    {prediction.winProbability}% win probability
+                  </Badge>
+                  <Badge variant="secondary" className="text-base px-4 py-1">
+                    {prediction.confidence}% confidence
+                  </Badge>
+                </div>
               </div>
               {!notFound && (
                 <div className="grid grid-cols-2 gap-4 pt-4">
@@ -150,12 +167,32 @@ const Index = () => {
             </CardContent>
           </Card>
 
+          {/* Factors breakdown */}
+          {prediction.factors && prediction.factors.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl tracking-wide">PREDICTION FACTORS</CardTitle>
+                <p className="text-sm text-muted-foreground">What went into this forecast</p>
+              </CardHeader>
+              <CardContent>
+                <div className="divide-y">
+                  {prediction.factors.map((f, i) => (
+                    <div key={i} className="flex justify-between items-center py-2.5 gap-4">
+                      <span className="text-sm text-muted-foreground">{f.label}</span>
+                      <span className="text-sm font-semibold text-right">{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Last 5 Matches Table */}
           {stats && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl tracking-wide">
-                  {player.toUpperCase()} — LAST 5 IPL MATCHES
+                  {player.toUpperCase()} — RECENT IPL MATCHES
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">Real data from Cricsheet (cricsheet.org)</p>
               </CardHeader>
@@ -163,20 +200,20 @@ const Index = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Match</TableHead>
                       <TableHead>vs</TableHead>
+                      <TableHead>Venue</TableHead>
                       <TableHead className="text-right">Runs</TableHead>
                       <TableHead className="text-right">Balls</TableHead>
-                      <TableHead className="text-right">Wickets</TableHead>
+                      <TableHead className="text-right">Wkts</TableHead>
                       <TableHead className="text-right">Date</TableHead>
                       <TableHead className="text-right">Season</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stats.map((s, i) => (
+                    {stats.slice(0, 8).map((s, i) => (
                       <TableRow key={i}>
-                        <TableCell className="font-medium text-xs">{s.match}</TableCell>
-                        <TableCell>{s.opponent}</TableCell>
+                        <TableCell className="font-medium">{s.opponent}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{s.venue.split(",")[0]}</TableCell>
                         <TableCell className="text-right font-semibold">{s.runs}</TableCell>
                         <TableCell className="text-right">{s.balls}</TableCell>
                         <TableCell className="text-right font-semibold">{s.wickets}</TableCell>
@@ -198,7 +235,7 @@ const Index = () => {
             <Card className="border-destructive/50">
               <CardContent className="pt-6">
                 <p className="text-destructive font-semibold">Player not found in database.</p>
-                <p className="text-sm text-muted-foreground mt-2">Available players: {AVAILABLE_PLAYERS.join(", ")}</p>
+                <p className="text-sm text-muted-foreground mt-2">Team-only prediction shown above. Try a name from the suggestions as you type.</p>
               </CardContent>
             </Card>
           )}
