@@ -159,7 +159,7 @@ export const TeamTotalPredictor = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center p-4 rounded-lg bg-muted">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Best Case</p>
-                <p className="text-3xl font-bold mt-1 text-green-600 dark:text-green-400">{result.bestCase}</p>
+                <p className="text-3xl font-bold mt-1 text-secondary">{result.bestCase}</p>
               </div>
               <div className="text-center p-4 rounded-lg bg-muted">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Worst Case</p>
@@ -177,7 +177,7 @@ export const TeamTotalPredictor = () => {
                       <p className="text-xs text-muted-foreground truncate">{b.note}</p>
                     </div>
                     <span className={`text-sm font-bold whitespace-nowrap ${
-                      i === 0 ? "" : b.delta > 0 ? "text-green-600 dark:text-green-400" : b.delta < 0 ? "text-destructive" : ""
+                      i === 0 ? "" : b.delta > 0 ? "text-secondary" : b.delta < 0 ? "text-destructive" : ""
                     }`}>
                       {i === 0 ? b.delta : (b.delta > 0 ? `+${b.delta}` : b.delta)}
                     </span>
