@@ -128,81 +128,154 @@ export function getPrediction(
   }
 
   // === Player prediction with venue + opposition + recent form ===
-  const overall = stats; // already sorted by date desc
-  const recent5 = overall.slice(0, 5);
-  const older = overall.slice(5);
+  // Filter "did bat" (faced at least 1 ball OR scored runs) and "did bowl" (has economy field) games
+  // This avoids dragging averages down with DNB / didn't bowl entries.
+  const batted = stats.filter((m) => m.balls > 0 || m.runs > 0);
+  const bowled = stats.filter((m) => typeof m.economy === "number");
 
-  const overallAvgRuns = avg(overall.map((m) => m.runs));
-  const overallAvgWkts = avg(overall.map((m) => m.wickets));
+  // Determine player role from the data
+  const battingRate = batted.length / Math.max(stats.length, 1);
+  const bowlingRate = bowled.length / Math.max(stats.length, 1);
+  const isPureBowler = bowlingRate > 0.6 && battingRate < 0.5;
+  const isPureBatter = battingRate > 0.7 && bowlingRate < 0.2;
 
-  // Recent form trend
-  const recentAvg = avg(recent5.map((m) => m.runs));
-  const olderAvg = older.length > 0 ? avg(older.map((m) => m.runs)) : recentAvg;
-  const formMultiplier = olderAvg > 0 ? Math.max(0.75, Math.min(1.25, recentAvg / olderAvg)) : 1;
+  // Time-weighted average: more recent matches get higher weight (exponential decay)
+  const weightedAvg = (matches: MatchStat[], pick: (m: MatchStat) => number): number => {
+    if (matches.length === 0) return 0;
+    let weightSum = 0;
+    let valueSum = 0;
+    matches.forEach((m, idx) => {
+      // matches[0] is most recent. Weight decays: 1.0, 0.92, 0.85, ...
+      const w = Math.pow(0.92, idx);
+      weightSum += w;
+      valueSum += pick(m) * w;
+    });
+    return valueSum / weightSum;
+  };
 
-  // Venue stats for player
-  const atVenue = overall.filter((m) => m.venue === venue);
-  const venueAvgRuns = atVenue.length > 0 ? avg(atVenue.map((m) => m.runs)) : null;
-  const venueAvgWkts = atVenue.length > 0 ? avg(atVenue.map((m) => m.wickets)) : null;
+  const overallAvgRuns = batted.length > 0 ? weightedAvg(batted, (m) => m.runs) : 0;
+  const overallAvgWkts = bowled.length > 0 ? weightedAvg(bowled, (m) => m.wickets) : 0;
+
+  // Strike rate (for batters) — useful but currently informational
+  const totalRuns = batted.reduce((a, m) => a + m.runs, 0);
+  const totalBalls = batted.reduce((a, m) => a + m.balls, 0);
+  const strikeRate = totalBalls > 0 ? (totalRuns / totalBalls) * 100 : 0;
+
+  // Recent form: last 5 batted innings vs prior 10
+  const recent5Bat = batted.slice(0, 5);
+  const prior10Bat = batted.slice(5, 15);
+  const recentAvg = avg(recent5Bat.map((m) => m.runs));
+  const olderAvg = prior10Bat.length > 0 ? avg(prior10Bat.map((m) => m.runs)) : recentAvg;
+  const formMultiplier =
+    olderAvg > 5 ? Math.max(0.6, Math.min(1.5, recentAvg / olderAvg)) : 1;
+
+  // Same form trend for bowling wickets
+  const recent5Bowl = bowled.slice(0, 5);
+  const prior10Bowl = bowled.slice(5, 15);
+  const recentWktAvg = avg(recent5Bowl.map((m) => m.wickets));
+  const olderWktAvg = prior10Bowl.length > 0 ? avg(prior10Bowl.map((m) => m.wickets)) : recentWktAvg;
+  const wktFormMultiplier =
+    olderWktAvg > 0.3 ? Math.max(0.6, Math.min(1.5, recentWktAvg / olderWktAvg)) : 1;
+
+  // Venue stats for player (only meaningful samples)
+  const atVenueBat = batted.filter((m) => m.venue === venue);
+  const atVenueBowl = bowled.filter((m) => m.venue === venue);
+  const venueAvgRuns = atVenueBat.length > 0 ? avg(atVenueBat.map((m) => m.runs)) : null;
+  const venueAvgWkts = atVenueBowl.length > 0 ? avg(atVenueBowl.map((m) => m.wickets)) : null;
 
   // Opposition (the other team — not the player's own team)
-  // Determine the opponent we should look at: the player's own team is in stats
   const ownTeam = stats[0].ownTeam;
   const opposition = ownTeam === team1 ? team2 : team1;
-  const vsOpp = overall.filter((m) => m.opponent === opposition);
-  const oppAvgRuns = vsOpp.length > 0 ? avg(vsOpp.map((m) => m.runs)) : null;
-  const oppAvgWkts = vsOpp.length > 0 ? avg(vsOpp.map((m) => m.wickets)) : null;
+  const vsOppBat = batted.filter((m) => m.opponent === opposition);
+  const vsOppBowl = bowled.filter((m) => m.opponent === opposition);
+  const oppAvgRuns = vsOppBat.length > 0 ? avg(vsOppBat.map((m) => m.runs)) : null;
+  const oppAvgWkts = vsOppBowl.length > 0 ? avg(vsOppBowl.map((m) => m.wickets)) : null;
 
-  // Weighted blend for runs:
-  //   recent form (career * trend) baseline 40%
-  //   venue history 30% (if available)
-  //   opposition history 30% (if available)
-  // Re-normalize when one is missing.
-  let runsWeights: { val: number; w: number }[] = [
-    { val: overallAvgRuns * formMultiplier, w: 0.4 },
-  ];
-  if (venueAvgRuns !== null) runsWeights.push({ val: venueAvgRuns, w: 0.3 });
-  if (oppAvgRuns !== null) runsWeights.push({ val: oppAvgRuns, w: 0.3 });
-  const runsTotalW = runsWeights.reduce((a, b) => a + b.w, 0);
-  const predictedRuns = Math.round(
-    runsWeights.reduce((a, b) => a + b.val * b.w, 0) / runsTotalW
-  );
+  // === Weighted blend for runs ===
+  // Base: time-weighted career * form trend (45%)
+  // Venue: 25% — but only if we have >=2 samples, else 15% and downweight base
+  // Opposition: 30% — but only if >=2 samples
+  // Sample-size weighting: scale weight by min(1, samples/3) so 1-game venue records don't dominate.
+  let predictedRuns = 0;
+  if (batted.length === 0 || isPureBowler) {
+    // Pure bowler: don't predict more than a small tail-end contribution
+    predictedRuns = Math.round(overallAvgRuns); // tiny number based on actual batting innings
+  } else {
+    const baseRuns = overallAvgRuns * formMultiplier;
+    const components: { val: number; w: number }[] = [{ val: baseRuns, w: 0.45 }];
+    if (venueAvgRuns !== null) {
+      const reliability = Math.min(1, atVenueBat.length / 3);
+      components.push({ val: venueAvgRuns, w: 0.25 * reliability });
+    }
+    if (oppAvgRuns !== null) {
+      const reliability = Math.min(1, vsOppBat.length / 3);
+      components.push({ val: oppAvgRuns, w: 0.30 * reliability });
+    }
+    const totalW = components.reduce((a, b) => a + b.w, 0);
+    predictedRuns = Math.round(components.reduce((a, b) => a + b.val * b.w, 0) / totalW);
+  }
 
-  let wktsWeights: { val: number; w: number }[] = [{ val: overallAvgWkts, w: 0.4 }];
-  if (venueAvgWkts !== null) wktsWeights.push({ val: venueAvgWkts, w: 0.3 });
-  if (oppAvgWkts !== null) wktsWeights.push({ val: oppAvgWkts, w: 0.3 });
-  const wktsTotalW = wktsWeights.reduce((a, b) => a + b.w, 0);
-  const predictedWkts = Math.round(
-    wktsWeights.reduce((a, b) => a + b.val * b.w, 0) / wktsTotalW
-  );
+  // === Weighted blend for wickets ===
+  let predictedWkts = 0;
+  if (bowled.length === 0 || isPureBatter) {
+    predictedWkts = 0;
+  } else {
+    const baseWkts = overallAvgWkts * wktFormMultiplier;
+    const components: { val: number; w: number }[] = [{ val: baseWkts, w: 0.45 }];
+    if (venueAvgWkts !== null) {
+      const reliability = Math.min(1, atVenueBowl.length / 3);
+      components.push({ val: venueAvgWkts, w: 0.25 * reliability });
+    }
+    if (oppAvgWkts !== null) {
+      const reliability = Math.min(1, vsOppBowl.length / 3);
+      components.push({ val: oppAvgWkts, w: 0.30 * reliability });
+    }
+    const totalW = components.reduce((a, b) => a + b.w, 0);
+    predictedWkts = Math.round(components.reduce((a, b) => a + b.val * b.w, 0) / totalW);
+  }
 
-  // Confidence: more data => higher confidence
+  // Confidence: more (relevant) data => higher confidence
+  const relevantSamples = (isPureBowler ? bowled.length : batted.length);
   const confidence = Math.min(
     95,
-    50 +
-      Math.min(15, overall.length) +
-      (atVenue.length > 0 ? 8 : 0) +
-      (vsOpp.length > 0 ? 8 : 0) +
-      Math.min(10, Math.round(Math.abs(score1 - score2) * 0.3))
+    45 +
+      Math.min(20, relevantSamples) +
+      (atVenueBat.length + atVenueBowl.length >= 2 ? 8 : atVenueBat.length + atVenueBowl.length === 1 ? 4 : 0) +
+      (vsOppBat.length + vsOppBowl.length >= 2 ? 8 : vsOppBat.length + vsOppBowl.length === 1 ? 4 : 0) +
+      Math.min(8, Math.round(Math.abs(score1 - score2) * 0.3))
   );
+
+  const role = isPureBowler ? "Bowler" : isPureBatter ? "Batter" : "All-rounder";
 
   factors.push(
     {
-      label: `${player} career avg`,
-      value: `${overallAvgRuns.toFixed(1)} runs / ${overallAvgWkts.toFixed(1)} wkts (${overall.length} matches)`,
+      label: `${player} role detected`,
+      value: `${role} (batted ${batted.length}, bowled ${bowled.length})`,
+    },
+    {
+      label: `${player} batting avg (recent-weighted)`,
+      value: batted.length > 0
+        ? `${overallAvgRuns.toFixed(1)} runs @ SR ${strikeRate.toFixed(0)} (${batted.length} innings)`
+        : "Did not bat",
+    },
+    {
+      label: `${player} bowling avg (recent-weighted)`,
+      value: bowled.length > 0
+        ? `${overallAvgWkts.toFixed(2)} wkts/match (${bowled.length} innings)`
+        : "Did not bowl",
     },
     {
       label: `${player} at ${venue.split(",")[0]}`,
       value:
-        atVenue.length > 0
-          ? `${venueAvgRuns!.toFixed(1)} runs / ${venueAvgWkts!.toFixed(1)} wkts (${atVenue.length} games)`
+        atVenueBat.length + atVenueBowl.length > 0
+          ? `${venueAvgRuns !== null ? `${venueAvgRuns.toFixed(1)} runs` : "—"} / ${venueAvgWkts !== null ? `${venueAvgWkts.toFixed(2)} wkts` : "—"} (${Math.max(atVenueBat.length, atVenueBowl.length)} games)`
           : "No data",
     },
     {
       label: `${player} vs ${opposition}`,
       value:
-        vsOpp.length > 0
-          ? `${oppAvgRuns!.toFixed(1)} runs / ${oppAvgWkts!.toFixed(1)} wkts (${vsOpp.length} games)`
+        vsOppBat.length + vsOppBowl.length > 0
+          ? `${oppAvgRuns !== null ? `${oppAvgRuns.toFixed(1)} runs` : "—"} / ${oppAvgWkts !== null ? `${oppAvgWkts.toFixed(2)} wkts` : "—"} (${Math.max(vsOppBat.length, vsOppBowl.length)} games)`
           : "No data",
     },
     {
@@ -215,9 +288,10 @@ export function getPrediction(
     `${winner} are favourites (${winProb}%) — squad strength ${winner === team1 ? s1Base : s2Base}, ` +
     `recent form ${winner === team1 ? form1.winPct : form2.winPct}% wins, ` +
     `${(winner === team1 ? venue1 : venue2).played > 0 ? `${(winner === team1 ? venue1 : venue2).winPct}% record at this venue` : "no venue history"}. ` +
-    `${player} prediction blends career average (${overallAvgRuns.toFixed(0)} runs), ` +
-    `${atVenue.length > 0 ? `${atVenue.length} match(es) at this venue` : "no venue data"}, ` +
-    `and ${vsOpp.length > 0 ? `${vsOpp.length} match(es) vs ${opposition}` : `no prior data vs ${opposition}`}.`;
+    `${player} (${role}) prediction uses recency-weighted ${batted.length > 0 ? `batting avg ${overallAvgRuns.toFixed(0)}` : "bowling stats"}, ` +
+    `${atVenueBat.length + atVenueBowl.length > 0 ? `${Math.max(atVenueBat.length, atVenueBowl.length)} game(s) at this venue` : "no venue data"}, ` +
+    `and ${vsOppBat.length + vsOppBowl.length > 0 ? `${Math.max(vsOppBat.length, vsOppBowl.length)} game(s) vs ${opposition}` : `no prior data vs ${opposition}`}. ` +
+    `DNB / didn't-bowl matches excluded so averages reflect actual on-field performance.`;
 
   return {
     winner,
