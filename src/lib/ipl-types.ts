@@ -1,10 +1,13 @@
 export interface MatchStat {
   match: string;
   opponent: string;
+  ownTeam: string;
   runs: number;
   balls: number;
   wickets: number;
   economy?: number;
+  venue: string;
+  city: string;
   date: string;
   season: string;
 }
@@ -16,6 +19,10 @@ export interface Prediction {
   playerWickets: number;
   confidence: number;
   reasoning: string;
+  factors: {
+    label: string;
+    value: string;
+  }[];
 }
 
 export const IPL_TEAMS = [
