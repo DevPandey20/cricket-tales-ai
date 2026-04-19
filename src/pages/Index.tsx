@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TeamTotalPredictor } from "@/components/TeamTotalPredictor";
 
 const Index = () => {
   const [team1, setTeam1] = useState("");
@@ -241,6 +242,11 @@ const Index = () => {
           )}
         </div>
       )}
+
+      {/* Team Total Predictor — separate section */}
+      <div className="border-t mt-8 pt-10 bg-muted/30">
+        <TeamTotalPredictor />
+      </div>
     </div>
   );
 };
