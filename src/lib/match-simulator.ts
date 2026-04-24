@@ -153,8 +153,8 @@ export function simulateMatch(
     const secondBowlPower = secondBat === team1 ? t2Bowl : t1Bowl;
 
     const innings1 = simulateInnings(firstBatPower, firstBowlPower, venueRunMod, rng);
-    // Chase advantage: chasing team gets a small boost
-    const chaseBoost = profile.chaseAdvantage * 0.05;
+    // Chase advantage: profile.chaseAdvantage is win% chasing (0..100). 50 = neutral.
+    const chaseBoost = ((profile.chaseAdvantage - 50) / 50) * 0.04;
     const innings2 = simulateInnings(
       secondBatPower * (1 + chaseBoost),
       secondBowlPower,
