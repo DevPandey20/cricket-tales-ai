@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      ball_by_ball: {
+        Row: {
+          batter: string
+          batter_team: string
+          bowler: string
+          bowler_team: string
+          created_at: string
+          dismissal_kind: string | null
+          id: string
+          innings: number
+          is_wicket: boolean
+          match_date: string
+          match_id: string
+          non_striker: string | null
+          over_num: number
+          player_out: string | null
+          runs_batter: number
+          runs_extras: number
+          runs_total: number
+          season: string
+          venue: string
+        }
+        Insert: {
+          batter: string
+          batter_team: string
+          bowler: string
+          bowler_team: string
+          created_at?: string
+          dismissal_kind?: string | null
+          id?: string
+          innings: number
+          is_wicket?: boolean
+          match_date: string
+          match_id: string
+          non_striker?: string | null
+          over_num: number
+          player_out?: string | null
+          runs_batter?: number
+          runs_extras?: number
+          runs_total?: number
+          season: string
+          venue: string
+        }
+        Update: {
+          batter?: string
+          batter_team?: string
+          bowler?: string
+          bowler_team?: string
+          created_at?: string
+          dismissal_kind?: string | null
+          id?: string
+          innings?: number
+          is_wicket?: boolean
+          match_date?: string
+          match_id?: string
+          non_striker?: string | null
+          over_num?: number
+          player_out?: string | null
+          runs_batter?: number
+          runs_extras?: number
+          runs_total?: number
+          season?: string
+          venue?: string
+        }
+        Relationships: []
+      }
       player_match_stats: {
         Row: {
           balls: number
@@ -68,6 +134,72 @@ export type Database = {
           season?: string
           venue?: string
           wickets?: number
+        }
+        Relationships: []
+      }
+      predictions: {
+        Row: {
+          actual_player_runs: number | null
+          actual_player_wickets: number | null
+          actual_winner: string | null
+          confidence: number
+          created_at: string
+          graded_at: string | null
+          id: string
+          match_date: string | null
+          player_name: string | null
+          predicted_player_runs: number | null
+          predicted_player_wickets: number | null
+          predicted_winner: string
+          runs_error: number | null
+          team1: string
+          team2: string
+          venue: string
+          wickets_error: number | null
+          win_probability: number
+          winner_correct: boolean | null
+        }
+        Insert: {
+          actual_player_runs?: number | null
+          actual_player_wickets?: number | null
+          actual_winner?: string | null
+          confidence: number
+          created_at?: string
+          graded_at?: string | null
+          id?: string
+          match_date?: string | null
+          player_name?: string | null
+          predicted_player_runs?: number | null
+          predicted_player_wickets?: number | null
+          predicted_winner: string
+          runs_error?: number | null
+          team1: string
+          team2: string
+          venue: string
+          wickets_error?: number | null
+          win_probability: number
+          winner_correct?: boolean | null
+        }
+        Update: {
+          actual_player_runs?: number | null
+          actual_player_wickets?: number | null
+          actual_winner?: string | null
+          confidence?: number
+          created_at?: string
+          graded_at?: string | null
+          id?: string
+          match_date?: string | null
+          player_name?: string | null
+          predicted_player_runs?: number | null
+          predicted_player_wickets?: number | null
+          predicted_winner?: string
+          runs_error?: number | null
+          team1?: string
+          team2?: string
+          venue?: string
+          wickets_error?: number | null
+          win_probability?: number
+          winner_correct?: boolean | null
         }
         Relationships: []
       }
