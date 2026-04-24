@@ -14,7 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      player_match_stats: {
+        Row: {
+          balls: number
+          city: string
+          created_at: string
+          economy: number | null
+          id: string
+          match_date: string
+          match_id: string
+          opponent: string
+          overs_bowled: number
+          own_team: string
+          player_name: string
+          runs: number
+          runs_conceded: number
+          season: string
+          venue: string
+          wickets: number
+        }
+        Insert: {
+          balls?: number
+          city?: string
+          created_at?: string
+          economy?: number | null
+          id?: string
+          match_date: string
+          match_id: string
+          opponent: string
+          overs_bowled?: number
+          own_team: string
+          player_name: string
+          runs?: number
+          runs_conceded?: number
+          season: string
+          venue: string
+          wickets?: number
+        }
+        Update: {
+          balls?: number
+          city?: string
+          created_at?: string
+          economy?: number | null
+          id?: string
+          match_date?: string
+          match_id?: string
+          opponent?: string
+          overs_bowled?: number
+          own_team?: string
+          player_name?: string
+          runs?: number
+          runs_conceded?: number
+          season?: string
+          venue?: string
+          wickets?: number
+        }
+        Relationships: []
+      }
+      sync_state: {
+        Row: {
+          key: string
+          last_run_at: string
+          last_synced_date: string | null
+          matches_synced: number
+          notes: string | null
+        }
+        Insert: {
+          key: string
+          last_run_at?: string
+          last_synced_date?: string | null
+          matches_synced?: number
+          notes?: string | null
+        }
+        Update: {
+          key?: string
+          last_run_at?: string
+          last_synced_date?: string | null
+          matches_synced?: number
+          notes?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
