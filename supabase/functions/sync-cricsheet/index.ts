@@ -1,6 +1,8 @@
 // Sync IPL match data from Cricsheet (https://cricsheet.org)
-// Downloads ipl_json.zip, parses matches newer than last sync,
-// aggregates per-player batting/bowling stats, upserts into player_match_stats.
+// - Downloads ipl_json.zip
+// - Aggregates per-player batting/bowling stats -> player_match_stats
+// - Stores every legal delivery -> ball_by_ball (for true H2H matchups)
+// - Grades any pending predictions whose match has now completed
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { unzipSync, strFromU8 } from "https://esm.sh/fflate@0.8.2";
@@ -22,6 +24,7 @@ interface CricsheetMatch {
     season?: string | number;
     event?: { name?: string };
     match_type?: string;
+    outcome?: { winner?: string; result?: string };
   };
   innings: Array<{
     team: string;
@@ -55,15 +58,39 @@ interface PlayerAgg {
   match_id: string;
 }
 
-function aggregateMatch(matchId: string, m: CricsheetMatch): PlayerAgg[] {
+interface BallRow {
+  match_id: string;
+  innings: number;
+  over_num: number;
+  batter: string;
+  bowler: string;
+  non_striker: string | null;
+  batter_team: string;
+  bowler_team: string;
+  runs_batter: number;
+  runs_extras: number;
+  runs_total: number;
+  is_wicket: boolean;
+  dismissal_kind: string | null;
+  player_out: string | null;
+  venue: string;
+  match_date: string;
+  season: string;
+}
+
+function aggregateMatch(matchId: string, m: CricsheetMatch): {
+  aggs: PlayerAgg[];
+  balls: BallRow[];
+} {
   const date = m.info.dates[0];
   const venue = m.info.venue ?? "Unknown";
   const city = m.info.city ?? "";
   const season = String(m.info.season ?? new Date(date).getFullYear());
   const teams = m.info.teams;
-  if (teams.length !== 2) return [];
+  if (teams.length !== 2) return { aggs: [], balls: [] };
 
   const players = new Map<string, PlayerAgg>();
+  const balls: BallRow[] = [];
   const ensure = (name: string, team: string): PlayerAgg => {
     const key = `${name}__${team}`;
     let p = players.get(key);
@@ -89,39 +116,143 @@ function aggregateMatch(matchId: string, m: CricsheetMatch): PlayerAgg[] {
     return p;
   };
 
-  for (const inn of m.innings) {
+  m.innings.forEach((inn, innIdx) => {
     const battingTeam = inn.team;
     const bowlingTeam = teams[0] === battingTeam ? teams[1] : teams[0];
     for (const over of inn.overs ?? []) {
+      let ballInOver = 0;
       for (const d of over.deliveries ?? []) {
         const batter = ensure(d.batter, battingTeam);
         batter.runs += d.runs.batter;
-        // Count legal deliveries faced (no wides)
-        const isWide = d.extras && (d.extras as any).wides;
+        const ext = d.extras ?? {};
+        const isWide = (ext as any).wides;
+        const isNoBall = (ext as any).noballs;
         if (!isWide) batter.balls += 1;
 
         const bowler = ensure(d.bowler, bowlingTeam);
-        // Runs conceded (exclude byes/legbyes/penalty per cricket convention)
-        const ext = d.extras ?? {};
         const conceded =
           d.runs.batter +
           ((ext as any).wides ?? 0) +
           ((ext as any).noballs ?? 0);
         bowler.runs_conceded += conceded;
-        const isNoBall = (ext as any).noballs;
         if (!isWide && !isNoBall) bowler.balls_bowled += 1;
 
+        let isWicket = false;
+        let dismissalKind: string | null = null;
+        let playerOut: string | null = null;
         for (const w of d.wickets ?? []) {
-          // Bowler doesn't get credit for run outs
-          if (w.kind !== "run out" && w.kind !== "retired hurt" && w.kind !== "obstructing the field") {
+          isWicket = true;
+          dismissalKind = w.kind;
+          playerOut = w.player_out;
+          if (
+            w.kind !== "run out" &&
+            w.kind !== "retired hurt" &&
+            w.kind !== "obstructing the field"
+          ) {
             bowler.wickets += 1;
           }
         }
+
+        if (!isWide) ballInOver += 1;
+        balls.push({
+          match_id: matchId,
+          innings: innIdx + 1,
+          over_num: over.over + ballInOver / 10,
+          batter: d.batter,
+          bowler: d.bowler,
+          non_striker: d.non_striker ?? null,
+          batter_team: battingTeam,
+          bowler_team: bowlingTeam,
+          runs_batter: d.runs.batter,
+          runs_extras: d.runs.extras,
+          runs_total: d.runs.total,
+          is_wicket: isWicket,
+          dismissal_kind: dismissalKind,
+          player_out: playerOut,
+          venue,
+          match_date: date,
+          season,
+        });
       }
     }
-  }
+  });
 
-  return Array.from(players.values());
+  return { aggs: Array.from(players.values()), balls };
+}
+
+// Grade any pending predictions whose match has now been synced.
+async function gradePredictions(supabase: any) {
+  const { data: pending } = await supabase
+    .from("predictions")
+    .select("*")
+    .is("graded_at", null)
+    .not("match_date", "is", null);
+  if (!pending || pending.length === 0) return 0;
+
+  let graded = 0;
+  for (const p of pending) {
+    // Find match in player_match_stats — gives us actual winner indirectly.
+    // We instead look for any row matching the date + teams.
+    const { data: matchRows } = await supabase
+      .from("player_match_stats")
+      .select("match_id, own_team, opponent")
+      .eq("match_date", p.match_date)
+      .in("own_team", [p.team1, p.team2])
+      .limit(1);
+    if (!matchRows || matchRows.length === 0) continue;
+
+    // Determine winner: highest team total in that match.
+    const matchId = matchRows[0].match_id;
+    const { data: allRows } = await supabase
+      .from("player_match_stats")
+      .select("own_team, runs")
+      .eq("match_id", matchId);
+    if (!allRows || allRows.length === 0) continue;
+
+    const totals: Record<string, number> = {};
+    for (const r of allRows) {
+      totals[r.own_team] = (totals[r.own_team] ?? 0) + r.runs;
+    }
+    const actualWinner =
+      (totals[p.team1] ?? 0) >= (totals[p.team2] ?? 0) ? p.team1 : p.team2;
+
+    // Player actuals
+    let actualRuns: number | null = null;
+    let actualWkts: number | null = null;
+    if (p.player_name) {
+      const { data: pRow } = await supabase
+        .from("player_match_stats")
+        .select("runs, wickets")
+        .eq("match_id", matchId)
+        .ilike("player_name", `%${p.player_name.split(/\s+/).pop()}%`)
+        .maybeSingle();
+      if (pRow) {
+        actualRuns = pRow.runs;
+        actualWkts = pRow.wickets;
+      }
+    }
+
+    await supabase
+      .from("predictions")
+      .update({
+        actual_winner: actualWinner,
+        actual_player_runs: actualRuns,
+        actual_player_wickets: actualWkts,
+        winner_correct: actualWinner === p.predicted_winner,
+        runs_error:
+          actualRuns !== null && p.predicted_player_runs !== null
+            ? Math.abs(actualRuns - p.predicted_player_runs)
+            : null,
+        wickets_error:
+          actualWkts !== null && p.predicted_player_wickets !== null
+            ? Math.abs(actualWkts - p.predicted_player_wickets)
+            : null,
+        graded_at: new Date().toISOString(),
+      })
+      .eq("id", p.id);
+    graded += 1;
+  }
+  return graded;
 }
 
 Deno.serve(async (req) => {
@@ -135,7 +266,6 @@ Deno.serve(async (req) => {
   );
 
   try {
-    // Get last sync date
     const { data: state } = await supabase
       .from("sync_state")
       .select("last_synced_date")
@@ -147,8 +277,6 @@ Deno.serve(async (req) => {
       : new Date("1900-01-01");
 
     console.log(`Last sync date: ${lastDate.toISOString()}`);
-
-    // Download zip
     console.log("Downloading Cricsheet zip...");
     const resp = await fetch(CRICSHEET_URL);
     if (!resp.ok) throw new Error(`Cricsheet fetch failed: ${resp.status}`);
@@ -161,6 +289,7 @@ Deno.serve(async (req) => {
 
     let newMatches = 0;
     let newRows = 0;
+    let newBalls = 0;
     let newestDate = lastDate;
     const fileNames = Object.keys(files);
     console.log(`Found ${fileNames.length} match files`);
@@ -179,7 +308,7 @@ Deno.serve(async (req) => {
       if (matchDate <= lastDate) continue;
       if (match.info.match_type && match.info.match_type !== "T20") continue;
 
-      const aggs = aggregateMatch(matchId, match);
+      const { aggs, balls } = aggregateMatch(matchId, match);
       if (aggs.length === 0) continue;
 
       const rows = aggs.map((a) => ({
@@ -208,18 +337,30 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Insert balls in chunks (avoid huge payloads)
+      const CHUNK = 500;
+      for (let i = 0; i < balls.length; i += CHUNK) {
+        const slice = balls.slice(i, i + CHUNK);
+        const { error: bErr } = await supabase
+          .from("ball_by_ball")
+          .insert(slice);
+        if (bErr) console.error(`Ball insert failed for ${matchId}:`, bErr.message);
+        else newBalls += slice.length;
+      }
+
       newMatches += 1;
       newRows += rows.length;
       if (matchDate > newestDate) newestDate = matchDate;
     }
 
-    // Update sync state
+    const gradedCount = await gradePredictions(supabase);
+
     await supabase.from("sync_state").upsert({
       key: "cricsheet_ipl",
       last_synced_date: newestDate.toISOString().slice(0, 10),
       last_run_at: new Date().toISOString(),
       matches_synced: newMatches,
-      notes: `Synced ${newMatches} new matches, ${newRows} player rows`,
+      notes: `Synced ${newMatches} matches, ${newRows} player rows, ${newBalls} balls, ${gradedCount} predictions graded`,
     });
 
     return new Response(
@@ -227,6 +368,8 @@ Deno.serve(async (req) => {
         ok: true,
         new_matches: newMatches,
         new_player_rows: newRows,
+        new_balls: newBalls,
+        graded_predictions: gradedCount,
         newest_match_date: newestDate.toISOString().slice(0, 10),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

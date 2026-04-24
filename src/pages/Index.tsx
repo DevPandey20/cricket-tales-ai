@@ -8,9 +8,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeamTotalPredictor } from "@/components/TeamTotalPredictor";
+import { PageLayout } from "@/components/PageLayout";
+import { WinProbGauge } from "@/components/WinProbGauge";
+import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 
 const Index = () => {
   const [team1, setTeam1] = useState("");
@@ -42,8 +55,23 @@ const Index = () => {
     const playerStats = await getLivePlayerStats(player);
     setStats(playerStats);
     setNotFound(!playerStats);
-    setPrediction(getPrediction(team1, team2, player, venue, playerStats));
+    const pred = getPrediction(team1, team2, player, venue, playerStats);
+    setPrediction(pred);
     setLoading(false);
+
+    // Save the prediction (fire-and-forget; powers the Accuracy dashboard)
+    supabase.from("predictions").insert({
+      team1, team2, venue,
+      player_name: player.trim(),
+      predicted_winner: pred.winner,
+      win_probability: pred.winProbability,
+      predicted_player_runs: pred.playerRuns,
+      predicted_player_wickets: pred.playerWickets,
+      confidence: pred.confidence,
+      match_date: new Date().toISOString().slice(0, 10),
+    }).then(({ error }) => {
+      if (error) console.warn("Could not save prediction:", error.message);
+    });
   };
 
   const handleSync = async () => {
@@ -78,87 +106,79 @@ const Index = () => {
   };
 
   const team2Options = IPL_TEAMS.filter((t) => t !== team1);
-
-  // Filter player suggestions
   const suggestions = player.trim().length >= 2
-    ? AVAILABLE_PLAYERS.filter((p) => p.toLowerCase().includes(player.trim().toLowerCase()))
+    ? AVAILABLE_PLAYERS.filter((p) => p.toLowerCase().includes(player.trim().toLowerCase())).slice(0, 8)
+    : [];
+
+  // Derive team-1 win % from prediction (it stores winProbability for the predicted winner)
+  const team1Pct = prediction
+    ? (prediction.winner === team1 ? prediction.winProbability : 100 - prediction.winProbability)
+    : 50;
+
+  // Build a small "form curve" of recent runs for the chart
+  const recentChart = stats && stats.length > 0
+    ? stats.slice(0, 10).reverse().map((s, i) => ({
+        idx: i + 1,
+        runs: s.runs,
+        opp: s.opponent.split(" ").pop(),
+      }))
     : [];
 
   return (
-    <div className="min-h-screen bg-background">
+    <PageLayout>
       {/* Hero */}
-      <div className="relative overflow-hidden bg-primary py-16 px-4">
+      <div className="relative -mx-4 -mt-8 mb-8 overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/85 px-4 py-12">
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage: "radial-gradient(circle at 20% 50%, hsl(35 95% 55%) 0%, transparent 50%), radial-gradient(circle at 80% 50%, hsl(150 60% 40%) 0%, transparent 50%)"
         }} />
-        <div className="relative mx-auto max-w-3xl text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-primary-foreground md:text-6xl">
-            IPL PREDICTOR
-          </h1>
-          <p className="mt-3 text-lg text-primary-foreground/80">
+        <div className="relative mx-auto max-w-3xl text-center text-primary-foreground">
+          <h1 className="text-4xl font-bold tracking-tight md:text-5xl">IPL EDGE</h1>
+          <p className="mt-2 text-primary-foreground/80">
             Real ball-by-ball stats from Cricsheet • Auto-syncs after every match
           </p>
           <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleSync}
-              disabled={syncing}
-              className="gap-2"
-            >
+            <Button size="sm" variant="secondary" onClick={handleSync} disabled={syncing} className="gap-2">
               <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "Syncing Cricsheet..." : "Sync Now"}
             </Button>
             {lastSync && (
-              <span className="text-xs text-primary-foreground/70">
-                Latest match in DB: {lastSync}
-              </span>
+              <span className="text-xs text-primary-foreground/70">Latest in DB: {lastSync}</span>
             )}
           </div>
         </div>
       </div>
 
       {/* Form */}
-      <div className="mx-auto max-w-3xl px-4 -mt-8 relative z-10">
-        <Card className="shadow-xl border-0">
+      <div className="mx-auto max-w-3xl">
+        <Card className="shadow-xl">
           <CardContent className="pt-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Team 1</label>
+              <Field label="Team 1">
                 <Select value={team1} onValueChange={(v) => { setTeam1(v); if (v === team2) setTeam2(""); }}>
                   <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
                   <SelectContent>
-                    {IPL_TEAMS.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
+                    {IPL_TEAMS.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Team 2</label>
+              </Field>
+              <Field label="Team 2">
                 <Select value={team2} onValueChange={setTeam2}>
                   <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
                   <SelectContent>
-                    {team2Options.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
+                    {team2Options.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Venue</label>
+            <Field label="Venue">
               <Select value={venue} onValueChange={setVenue}>
                 <SelectTrigger><SelectValue placeholder="Select venue" /></SelectTrigger>
                 <SelectContent>
-                  {IPL_VENUES.map((v) => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
-                  ))}
+                  {IPL_VENUES.map((v) => (<SelectItem key={v} value={v}>{v}</SelectItem>))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2 relative">
-              <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Name</label>
+            </Field>
+            <Field label="Player Name">
               <Input
                 placeholder="e.g. Virat Kohli, Jasprit Bumrah, Rohit Sharma..."
                 value={player}
@@ -167,23 +187,17 @@ const Index = () => {
               {suggestions.length > 0 && suggestions.length <= 8 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {suggestions.map((s) => (
-                    <Badge
-                      key={s}
-                      variant="secondary"
+                    <Badge key={s} variant="secondary"
                       className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                      onClick={() => setPlayer(s)}
-                    >
-                      {s}
-                    </Badge>
+                      onClick={() => setPlayer(s)}>{s}</Badge>
                   ))}
                 </div>
               )}
-            </div>
+            </Field>
             <Button
               className="w-full text-lg font-semibold py-6 bg-secondary text-secondary-foreground hover:bg-secondary/90"
               onClick={handlePredict}
-              disabled={!team1 || !team2 || !venue || !player.trim() || loading}
-            >
+              disabled={!team1 || !team2 || !venue || !player.trim() || loading}>
               {loading ? "Analyzing..." : "🏏 Predict Match"}
             </Button>
           </CardContent>
@@ -192,46 +206,75 @@ const Index = () => {
 
       {/* Results */}
       {prediction && (
-        <div className="mx-auto max-w-3xl px-4 py-10 space-y-6">
-          {/* Prediction Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="mx-auto max-w-3xl py-10 space-y-6"
+        >
           <Card className="border-2 border-secondary/50 shadow-lg overflow-hidden">
             <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4">
               <h2 className="text-2xl font-bold text-primary-foreground tracking-wide">AI PREDICTION</h2>
             </div>
-            <CardContent className="pt-6 space-y-4">
-              <div className="text-center space-y-2">
+            <CardContent className="pt-6 space-y-6">
+              <WinProbGauge team1={team1} team2={team2} team1Pct={team1Pct} />
+              <div className="text-center">
                 <p className="text-muted-foreground text-sm uppercase tracking-wider">Predicted Winner</p>
                 <h3 className="text-3xl font-bold text-accent">{prediction.winner}</h3>
-                <div className="flex justify-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-base px-4 py-1">
-                    {prediction.winProbability}% win probability
-                  </Badge>
-                  <Badge variant="secondary" className="text-base px-4 py-1">
-                    {prediction.confidence}% confidence
-                  </Badge>
-                </div>
+                <Badge variant="secondary" className="mt-2 text-base px-4 py-1">
+                  {prediction.confidence}% confidence
+                </Badge>
               </div>
               {!notFound && (
-                <div className="grid grid-cols-2 gap-4 pt-4">
+                <div className="grid grid-cols-2 gap-4 pt-2">
                   <div className="text-center p-4 rounded-lg bg-muted">
                     <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Runs</p>
-                    <p className="text-4xl font-bold mt-1">{prediction.playerRuns}</p>
+                    <p className="text-4xl font-bold mt-1 tabular-nums">
+                      <AnimatedCounter value={prediction.playerRuns} />
+                    </p>
                     <p className="text-xs text-muted-foreground">{player}</p>
                   </div>
                   <div className="text-center p-4 rounded-lg bg-muted">
                     <p className="text-sm text-muted-foreground uppercase tracking-wider">Predicted Wickets</p>
-                    <p className="text-4xl font-bold mt-1">{prediction.playerWickets}</p>
+                    <p className="text-4xl font-bold mt-1 tabular-nums">
+                      <AnimatedCounter value={prediction.playerWickets} />
+                    </p>
                     <p className="text-xs text-muted-foreground">{player}</p>
                   </div>
                 </div>
               )}
-              <div className="bg-muted/50 rounded-lg p-4 mt-2">
+              <div className="bg-muted/50 rounded-lg p-4">
                 <p className="text-sm text-muted-foreground italic">{prediction.reasoning}</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Factors breakdown */}
+          {/* Recent form chart */}
+          {recentChart.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{player} — Last {recentChart.length} Innings (runs)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={recentChart}>
+                    <defs>
+                      <linearGradient id="recentG" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="hsl(var(--accent))" />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="opp" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Line type="monotone" dataKey="runs" stroke="url(#recentG)" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--primary))" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
           {prediction.factors && prediction.factors.length > 0 && (
             <Card>
               <CardHeader>
@@ -251,13 +294,10 @@ const Index = () => {
             </Card>
           )}
 
-          {/* Last 5 Matches Table */}
           {stats && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl tracking-wide">
-                  {player.toUpperCase()} — RECENT IPL MATCHES
-                </CardTitle>
+                <CardTitle className="text-xl tracking-wide">{player.toUpperCase()} — RECENT IPL MATCHES</CardTitle>
                 <p className="text-sm text-muted-foreground">Real data from Cricsheet (cricsheet.org)</p>
               </CardHeader>
               <CardContent>
@@ -283,9 +323,7 @@ const Index = () => {
                         <TableCell className="text-right font-semibold">{s.wickets}</TableCell>
                         <TableCell className="text-right text-muted-foreground text-sm">{s.date}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={s.season === "IPL 2026" ? "default" : "secondary"} className="text-xs">
-                            {s.season}
-                          </Badge>
+                          <Badge variant={s.season === "IPL 2026" ? "default" : "secondary"} className="text-xs">{s.season}</Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -303,15 +341,21 @@ const Index = () => {
               </CardContent>
             </Card>
           )}
-        </div>
+        </motion.div>
       )}
 
-      {/* Team Total Predictor — separate section */}
-      <div className="border-t mt-8 pt-10 bg-muted/30">
+      <div className="mx-auto max-w-5xl mt-12 pt-10 border-t">
         <TeamTotalPredictor />
       </div>
-    </div>
+    </PageLayout>
   );
 };
+
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="space-y-2">
+    <label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{label}</label>
+    {children}
+  </div>
+);
 
 export default Index;
