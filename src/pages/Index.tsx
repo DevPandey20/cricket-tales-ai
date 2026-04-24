@@ -96,8 +96,25 @@ const Index = () => {
             IPL PREDICTOR
           </h1>
           <p className="mt-3 text-lg text-primary-foreground/80">
-            Real ball-by-ball stats from Cricsheet • Venue, form & H2H factored in
+            Real ball-by-ball stats from Cricsheet • Auto-syncs after every match
           </p>
+          <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleSync}
+              disabled={syncing}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing Cricsheet..." : "Sync Now"}
+            </Button>
+            {lastSync && (
+              <span className="text-xs text-primary-foreground/70">
+                Latest match in DB: {lastSync}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
