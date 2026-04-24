@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { IPL_TEAMS, AVAILABLE_PLAYERS, IPL_VENUES, getPlayerStats, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
+import { useEffect, useState } from "react";
+import { IPL_TEAMS, AVAILABLE_PLAYERS, IPL_VENUES, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
+import { getLivePlayerStats, triggerSync } from "@/lib/live-player-stats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TeamTotalPredictor } from "@/components/TeamTotalPredictor";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { RefreshCw } from "lucide-react";
 
 const Index = () => {
   const [team1, setTeam1] = useState("");
@@ -17,18 +21,60 @@ const Index = () => {
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const handlePredict = () => {
+  useEffect(() => {
+    supabase
+      .from("sync_state")
+      .select("last_synced_date")
+      .eq("key", "cricsheet_ipl")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.last_synced_date) setLastSync(data.last_synced_date);
+      });
+  }, []);
+
+  const handlePredict = async () => {
     if (!team1 || !team2 || !venue || !player.trim()) return;
     setLoading(true);
     setNotFound(false);
-    setTimeout(() => {
-      const playerStats = getPlayerStats(player);
-      setStats(playerStats);
-      setNotFound(!playerStats);
-      setPrediction(getPrediction(team1, team2, player, venue));
-      setLoading(false);
-    }, 800);
+    const playerStats = await getLivePlayerStats(player);
+    setStats(playerStats);
+    setNotFound(!playerStats);
+    setPrediction(getPrediction(team1, team2, player, venue, playerStats));
+    setLoading(false);
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    const res = await triggerSync();
+    setSyncing(false);
+    if (res.ok) {
+      toast({
+        title: "Sync complete",
+        description: `Pulled ${res.newMatches} new match${res.newMatches === 1 ? "" : "es"} from Cricsheet.`,
+      });
+      const { data } = await supabase
+        .from("sync_state")
+        .select("last_synced_date")
+        .eq("key", "cricsheet_ipl")
+        .maybeSingle();
+      if (data?.last_synced_date) setLastSync(data.last_synced_date);
+      if (stats && player.trim()) {
+        const fresh = await getLivePlayerStats(player);
+        setStats(fresh);
+        if (fresh && team1 && team2 && venue) {
+          setPrediction(getPrediction(team1, team2, player, venue, fresh));
+        }
+      }
+    } else {
+      toast({
+        title: "Sync failed",
+        description: res.error ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const team2Options = IPL_TEAMS.filter((t) => t !== team1);
@@ -50,8 +96,25 @@ const Index = () => {
             IPL PREDICTOR
           </h1>
           <p className="mt-3 text-lg text-primary-foreground/80">
-            Real ball-by-ball stats from Cricsheet • Venue, form & H2H factored in
+            Real ball-by-ball stats from Cricsheet • Auto-syncs after every match
           </p>
+          <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleSync}
+              disabled={syncing}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing Cricsheet..." : "Sync Now"}
+            </Button>
+            {lastSync && (
+              <span className="text-xs text-primary-foreground/70">
+                Latest match in DB: {lastSync}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

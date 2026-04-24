@@ -66,9 +66,13 @@ export function getPrediction(
   team1: string,
   team2: string,
   player: string,
-  venue: string
+  venue: string,
+  preloadedStats?: MatchStat[] | null
 ): Prediction {
-  const stats = getPlayerStats(player);
+  // Use injected (live + hardcoded merged) stats when supplied, otherwise fall
+  // back to hardcoded-only lookup. This keeps the function pure-callable while
+  // letting the UI feed in fresher Cricsheet data.
+  const stats = preloadedStats !== undefined ? preloadedStats : getPlayerStats(player);
 
   // === Team prediction ===
   const s1Base = TEAM_STRENGTH[team1] ?? 78;
