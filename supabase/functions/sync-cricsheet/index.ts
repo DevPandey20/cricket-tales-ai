@@ -224,41 +224,36 @@ async function gradePredictions(supabase: any) {
 
   let graded = 0;
   for (const p of pending) {
-    // Find match in player_match_stats — gives us actual winner indirectly.
-    // We instead look for any row matching the date + teams.
-    const { data: matchRows } = await supabase
-      .from("player_match_stats")
-      .select("match_id, own_team, opponent")
-      .eq("match_date", p.match_date)
-      .in("own_team", [p.team1, p.team2])
-      .limit(1);
-    if (!matchRows || matchRows.length === 0) continue;
+    const predictionDate = p.match_date as string;
+    const from = new Date(new Date(predictionDate).getTime() - 3 * 86_400_000).toISOString().slice(0, 10);
+    const to = new Date(new Date(predictionDate).getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const { data: resultRows } = await supabase
+      .from("match_results")
+      .select("match_id, match_date, team1, team2, winner")
+      .gte("match_date", from)
+      .lte("match_date", to)
+      .not("winner", "is", null)
+      .order("match_date", { ascending: true });
+    const result = (resultRows ?? []).find((r: any) =>
+      ((sameTeam(r.team1, p.team1) && sameTeam(r.team2, p.team2)) ||
+        (sameTeam(r.team1, p.team2) && sameTeam(r.team2, p.team1))) &&
+      daysBetween(predictionDate, r.match_date) <= 7,
+    );
+    if (!result) continue;
 
-    // Determine winner: highest team total in that match.
-    const matchId = matchRows[0].match_id;
-    const { data: allRows } = await supabase
-      .from("player_match_stats")
-      .select("own_team, runs")
-      .eq("match_id", matchId);
-    if (!allRows || allRows.length === 0) continue;
-
-    const totals: Record<string, number> = {};
-    for (const r of allRows) {
-      totals[r.own_team] = (totals[r.own_team] ?? 0) + r.runs;
-    }
-    const actualWinner =
-      (totals[p.team1] ?? 0) >= (totals[p.team2] ?? 0) ? p.team1 : p.team2;
+    const matchId = result.match_id;
+    const actualWinner = sameTeam(result.winner, p.team1) ? p.team1 : sameTeam(result.winner, p.team2) ? p.team2 : result.winner;
 
     // Player actuals
     let actualRuns: number | null = null;
     let actualWkts: number | null = null;
     if (p.player_name) {
-      const { data: pRow } = await supabase
+      const { data: playerRows } = await supabase
         .from("player_match_stats")
-        .select("runs, wickets")
+        .select("player_name, runs, wickets")
         .eq("match_id", matchId)
-        .ilike("player_name", `%${p.player_name.split(/\s+/).pop()}%`)
-        .maybeSingle();
+        .limit(80);
+      const pRow = (playerRows ?? []).find((r: any) => namesLikelyMatch(p.player_name, r.player_name));
       if (pRow) {
         actualRuns = pRow.runs;
         actualWkts = pRow.wickets;
