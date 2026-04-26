@@ -127,7 +127,7 @@ const Index = () => {
   return (
     <PageLayout>
       {/* Hero */}
-      <div className="relative -mx-4 -mt-8 mb-8 overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/85 px-4 py-12">
+      <div className="relative -mx-4 -mt-8 mb-6 overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/85 px-4 py-12">
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage: "radial-gradient(circle at 20% 50%, hsl(35 95% 55%) 0%, transparent 50%), radial-gradient(circle at 80% 50%, hsl(150 60% 40%) 0%, transparent 50%)"
         }} />
@@ -146,6 +146,29 @@ const Index = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* How it works */}
+      <div className="mx-auto mb-8 max-w-3xl">
+        <Card className="border-dashed">
+          <CardContent className="grid gap-3 pt-6 text-sm sm:grid-cols-2">
+            <div>
+              <p className="font-semibold">👋 New here? Three steps:</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+                <li>Pick two teams + venue + a player below</li>
+                <li>Hit <em>Predict Match</em> for an instant forecast</li>
+                <li>Use the top nav to explore Simulator, Matchups, Fantasy XI & more</li>
+              </ol>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground">All numbers are real.</p>
+              <p className="mt-1">
+                Powered by every IPL ball ever bowled (Cricsheet). Predictions are saved to the
+                public <strong>Accuracy</strong> page so you can see how often we're right.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Form */}

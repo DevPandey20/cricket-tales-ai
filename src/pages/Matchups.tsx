@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PageLayout } from "@/components/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { PlayerInput } from "@/components/PlayerInput";
 import { Swords, AlertCircle } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -88,37 +88,6 @@ const Matchups = () => {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<MatchupSummary | null>(null);
   const [searched, setSearched] = useState(false);
-  const [batterSuggestions, setBatterSuggestions] = useState<string[]>([]);
-  const [bowlerSuggestions, setBowlerSuggestions] = useState<string[]>([]);
-
-  // Fetch player suggestions from DB
-  useEffect(() => {
-    if (batter.length < 2) return setBatterSuggestions([]);
-    supabase
-      .from("ball_by_ball")
-      .select("batter")
-      .ilike("batter", `%${batter}%`)
-      .limit(50)
-      .then(({ data }) => {
-        if (!data) return;
-        const uniq = Array.from(new Set(data.map((r: any) => r.batter))).slice(0, 6);
-        setBatterSuggestions(uniq);
-      });
-  }, [batter]);
-
-  useEffect(() => {
-    if (bowler.length < 2) return setBowlerSuggestions([]);
-    supabase
-      .from("ball_by_ball")
-      .select("bowler")
-      .ilike("bowler", `%${bowler}%`)
-      .limit(50)
-      .then(({ data }) => {
-        if (!data) return;
-        const uniq = Array.from(new Set(data.map((r: any) => r.bowler))).slice(0, 6);
-        setBowlerSuggestions(uniq);
-      });
-  }, [bowler]);
 
   const search = async () => {
     if (!batter.trim() || !bowler.trim()) return;
@@ -148,35 +117,21 @@ const Matchups = () => {
     >
       <Card className="mb-6">
         <CardContent className="grid gap-4 pt-6 md:grid-cols-[1fr_auto_1fr_auto]">
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Batter</label>
-            <Input placeholder="e.g. Virat Kohli or V Kohli" value={batter} onChange={(e) => setBatter(e.target.value)} />
-            {batterSuggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {batterSuggestions.map((s) => (
-                  <Badge key={s} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-primary-foreground" onClick={() => { setBatter(s); setBatterSuggestions([]); }}>
-                    {s}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
+          <PlayerInput
+            label="Batter"
+            value={batter}
+            onChange={setBatter}
+            placeholder="e.g. Virat Kohli or V Kohli"
+          />
           <div className="hidden items-center md:flex">
             <Swords className="h-6 w-6 text-muted-foreground" />
           </div>
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bowler</label>
-            <Input placeholder="e.g. Jasprit Bumrah or JJ Bumrah" value={bowler} onChange={(e) => setBowler(e.target.value)} />
-            {bowlerSuggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {bowlerSuggestions.map((s) => (
-                  <Badge key={s} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-primary-foreground" onClick={() => { setBowler(s); setBowlerSuggestions([]); }}>
-                    {s}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
+          <PlayerInput
+            label="Bowler"
+            value={bowler}
+            onChange={setBowler}
+            placeholder="e.g. Jasprit Bumrah or JJ Bumrah"
+          />
           <div className="flex items-end">
             <Button onClick={search} disabled={!batter.trim() || !bowler.trim() || loading} className="w-full md:w-auto">
               {loading ? "Searching..." : "Compare"}

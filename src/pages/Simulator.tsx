@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { IPL_TEAMS, IPL_VENUES } from "@/lib/ipl-data";
+import { IPL_TEAMS, IPL_VENUES, getPrediction } from "@/lib/ipl-data";
 import { simulateMatch, type SimResult } from "@/lib/match-simulator";
+import { getLivePlayerStats } from "@/lib/live-player-stats";
 import { WinProbGauge } from "@/components/WinProbGauge";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { PlayerInput } from "@/components/PlayerInput";
 import {
   ResponsiveContainer,
   LineChart,
@@ -19,7 +21,7 @@ import {
   Area,
   CartesianGrid,
 } from "recharts";
-import { Activity } from "lucide-react";
+import { Activity, User } from "lucide-react";
 
 const Simulator = () => {
   const [team1, setTeam1] = useState("");
@@ -27,6 +29,8 @@ const Simulator = () => {
   const [venue, setVenue] = useState("");
   const [battingFirst, setBattingFirst] = useState("");
   const [iterations, setIterations] = useState(800);
+  const [focusPlayer, setFocusPlayer] = useState("");
+  const [playerProj, setPlayerProj] = useState<{ name: string; runs: number; wickets: number; confidence: number } | null>(null);
   const [result, setResult] = useState<SimResult | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -38,10 +42,21 @@ const Simulator = () => {
   const run = async () => {
     if (!canRun) return;
     setRunning(true);
+    setPlayerProj(null);
     // tiny defer so spinner shows
     await new Promise((r) => setTimeout(r, 30));
     const r = simulateMatch(team1, team2, venue, iterations, battingFirst);
     setResult(r);
+    if (focusPlayer.trim()) {
+      const stats = await getLivePlayerStats(focusPlayer);
+      const pred = getPrediction(team1, team2, focusPlayer, venue, stats);
+      setPlayerProj({
+        name: focusPlayer.trim(),
+        runs: pred.playerRuns,
+        wickets: pred.playerWickets,
+        confidence: pred.confidence,
+      });
+    }
     setRunning(false);
   };
 
@@ -134,6 +149,13 @@ const Simulator = () => {
                 className="w-full accent-primary"
               />
             </Field>
+            <PlayerInput
+              label="Project a player"
+              optional
+              value={focusPlayer}
+              onChange={setFocusPlayer}
+              placeholder="e.g. Virat Kohli"
+            />
             <Button onClick={run} disabled={!canRun || running} className="w-full">
               {running ? "Simulating..." : `Run ${iterations} simulations`}
             </Button>
@@ -165,6 +187,37 @@ const Simulator = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {playerProj && (
+                <Card className="border-2 border-accent/30 bg-accent/5">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <User className="h-4 w-4 text-accent" />
+                      Projection — {playerProj.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Runs</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.runs} />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Wickets</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.wickets} />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Confidence</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.confidence} suffix="%" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="grid gap-6 md:grid-cols-2">
                 <Card>
