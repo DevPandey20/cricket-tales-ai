@@ -78,6 +78,39 @@ interface BallRow {
   season: string;
 }
 
+const teamKey = (name: string) =>
+  name.toLowerCase().replace(/\b(bengaluru|bangalore)\b/g, "rcb-city").replace(/[^a-z0-9]/g, "");
+
+const sameTeam = (a: string, b: string) => teamKey(a) === teamKey(b);
+
+function nameVariants(name: string): string[] {
+  const trimmed = name.trim();
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  const variants = new Set<string>([trimmed]);
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    const firstInitial = parts[0][0];
+    variants.add(`${firstInitial} ${last}`);
+    variants.add(`${firstInitial}${last}`);
+    variants.add(last);
+  }
+  return Array.from(variants);
+}
+
+function namesLikelyMatch(input: string, actual: string): boolean {
+  const inKey = input.toLowerCase().replace(/[^a-z]/g, "");
+  const actualKey = actual.toLowerCase().replace(/[^a-z]/g, "");
+  if (inKey === actualKey) return true;
+  return nameVariants(input).some((v) =>
+    actual.toLowerCase() === v.toLowerCase() ||
+    actualKey === v.toLowerCase().replace(/[^a-z]/g, "") ||
+    actual.toLowerCase().includes(v.toLowerCase()),
+  );
+}
+
+const daysBetween = (a: string, b: string) =>
+  Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
+
 function aggregateMatch(matchId: string, m: CricsheetMatch): {
   aggs: PlayerAgg[];
   balls: BallRow[];
