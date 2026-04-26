@@ -88,37 +88,6 @@ const Matchups = () => {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<MatchupSummary | null>(null);
   const [searched, setSearched] = useState(false);
-  const [batterSuggestions, setBatterSuggestions] = useState<string[]>([]);
-  const [bowlerSuggestions, setBowlerSuggestions] = useState<string[]>([]);
-
-  // Fetch player suggestions from DB
-  useEffect(() => {
-    if (batter.length < 2) return setBatterSuggestions([]);
-    supabase
-      .from("ball_by_ball")
-      .select("batter")
-      .ilike("batter", `%${batter}%`)
-      .limit(50)
-      .then(({ data }) => {
-        if (!data) return;
-        const uniq = Array.from(new Set(data.map((r: any) => r.batter))).slice(0, 6);
-        setBatterSuggestions(uniq);
-      });
-  }, [batter]);
-
-  useEffect(() => {
-    if (bowler.length < 2) return setBowlerSuggestions([]);
-    supabase
-      .from("ball_by_ball")
-      .select("bowler")
-      .ilike("bowler", `%${bowler}%`)
-      .limit(50)
-      .then(({ data }) => {
-        if (!data) return;
-        const uniq = Array.from(new Set(data.map((r: any) => r.bowler))).slice(0, 6);
-        setBowlerSuggestions(uniq);
-      });
-  }, [bowler]);
 
   const search = async () => {
     if (!batter.trim() || !bowler.trim()) return;
