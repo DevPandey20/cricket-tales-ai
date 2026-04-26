@@ -77,6 +77,13 @@ const Fantasy = () => {
                 className="w-full accent-primary"
               />
             </Field>
+            <PlayerInput
+              label="Highlight a player"
+              optional
+              value={focusPlayer}
+              onChange={setFocusPlayer}
+              placeholder="e.g. Virat Kohli"
+            />
             <Button onClick={run} disabled={!canRun} className="w-full">
               Build Optimal XI
             </Button>
