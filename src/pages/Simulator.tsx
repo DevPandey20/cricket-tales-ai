@@ -149,6 +149,13 @@ const Simulator = () => {
                 className="w-full accent-primary"
               />
             </Field>
+            <PlayerInput
+              label="Project a player"
+              optional
+              value={focusPlayer}
+              onChange={setFocusPlayer}
+              placeholder="e.g. Virat Kohli"
+            />
             <Button onClick={run} disabled={!canRun || running} className="w-full">
               {running ? "Simulating..." : `Run ${iterations} simulations`}
             </Button>
