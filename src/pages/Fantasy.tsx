@@ -23,6 +23,7 @@ const Fantasy = () => {
   const [team2, setTeam2] = useState("");
   const [venue, setVenue] = useState("");
   const [budget, setBudget] = useState(100);
+  const [focusPlayer, setFocusPlayer] = useState("");
   const [result, setResult] = useState<ReturnType<typeof buildFantasyXI> | null>(null);
 
   const team2Options = IPL_TEAMS.filter((t) => t !== team1);
