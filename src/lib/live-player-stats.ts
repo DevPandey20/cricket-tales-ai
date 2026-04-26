@@ -117,7 +117,7 @@ export async function triggerSync(): Promise<{
 }> {
   try {
     const { data, error } = await supabase.functions.invoke("sync-cricsheet", {
-      body: {},
+      body: { force: true },
     });
     if (error) return { ok: false, error: error.message };
     return { ok: true, newMatches: data?.new_matches ?? 0 };
