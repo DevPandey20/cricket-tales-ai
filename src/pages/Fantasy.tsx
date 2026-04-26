@@ -183,8 +183,8 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   </div>
 );
 
-const PlayerCard = ({ player, isCaptain, isVc }: { player: FantasyPlayer; isCaptain?: boolean; isVc?: boolean }) => (
-  <div className="flex items-center justify-between rounded-lg border bg-card p-3">
+const PlayerCard = ({ player, isCaptain, isVc, isFocus }: { player: FantasyPlayer; isCaptain?: boolean; isVc?: boolean; isFocus?: boolean }) => (
+  <div className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${isFocus ? "border-accent bg-accent/10 ring-2 ring-accent/40" : "bg-card"}`}>
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
         <span className="truncate font-semibold">{player.name}</span>
