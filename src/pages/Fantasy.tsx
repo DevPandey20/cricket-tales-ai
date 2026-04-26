@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { IPL_TEAMS, IPL_VENUES } from "@/lib/ipl-data";
 import { buildFantasyXI, type FantasyPlayer } from "@/lib/fantasy-optimizer";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
-import { Star, Trophy } from "lucide-react";
+import { PlayerInput } from "@/components/PlayerInput";
+import { Star, Trophy, UserCheck } from "lucide-react";
 
 const ROLE_LABEL: Record<string, string> = { WK: "Keeper", BAT: "Batter", BOWL: "Bowler", AR: "All-rounder" };
 const ROLE_TONE: Record<string, string> = {
