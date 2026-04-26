@@ -80,6 +80,45 @@ export type Database = {
         }
         Relationships: []
       }
+      match_results: {
+        Row: {
+          city: string
+          match_date: string
+          match_id: string
+          result: string | null
+          season: string
+          synced_at: string
+          team1: string
+          team2: string
+          venue: string
+          winner: string | null
+        }
+        Insert: {
+          city?: string
+          match_date: string
+          match_id: string
+          result?: string | null
+          season: string
+          synced_at?: string
+          team1: string
+          team2: string
+          venue: string
+          winner?: string | null
+        }
+        Update: {
+          city?: string
+          match_date?: string
+          match_id?: string
+          result?: string | null
+          season?: string
+          synced_at?: string
+          team1?: string
+          team2?: string
+          venue?: string
+          winner?: string | null
+        }
+        Relationships: []
+      }
       player_match_stats: {
         Row: {
           balls: number
