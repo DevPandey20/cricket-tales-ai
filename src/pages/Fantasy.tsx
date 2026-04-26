@@ -115,10 +115,33 @@ const Fantasy = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {result.picks.map((p, i) => (
-                      <PlayerCard key={p.name} player={p} isCaptain={i === 0 && captainCandidates[0]?.name === p.name} isVc={captainCandidates[1]?.name === p.name} />
-                    ))}
+                    {result.picks.map((p, i) => {
+                      const focus = focusPlayer.trim().toLowerCase();
+                      const isFocus = focus.length > 0 &&
+                        (p.name.toLowerCase().includes(focus) ||
+                          focus.includes(p.name.split(/\s+/).pop()?.toLowerCase() ?? "_"));
+                      return (
+                        <PlayerCard
+                          key={p.name}
+                          player={p}
+                          isCaptain={i === 0 && captainCandidates[0]?.name === p.name}
+                          isVc={captainCandidates[1]?.name === p.name}
+                          isFocus={isFocus}
+                        />
+                      );
+                    })}
                   </div>
+                  {focusPlayer.trim() && !result.picks.some((p) =>
+                    p.name.toLowerCase().includes(focusPlayer.trim().toLowerCase()),
+                  ) && (
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+                      <UserCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        <span className="font-semibold">{focusPlayer}</span> didn't make the optimal XI for these constraints.
+                        Increase the budget or pick a different match-up to try.
+                      </span>
+                    </div>
+                  )}
                   {result.picks.length < 11 && (
                     <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
                       Only {result.picks.length} players selected — try increasing the budget.
