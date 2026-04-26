@@ -294,17 +294,22 @@ Deno.serve(async (req) => {
   );
 
   try {
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const forceRecent = Boolean(body?.force);
     const { data: state } = await supabase
       .from("sync_state")
       .select("last_synced_date")
       .eq("key", "cricsheet_ipl")
       .maybeSingle();
 
-    const lastDate = state?.last_synced_date
+    const storedLastDate = state?.last_synced_date
       ? new Date(state.last_synced_date)
       : new Date("1900-01-01");
+    const lastDate = forceRecent
+      ? new Date(Date.now() - 75 * 86_400_000)
+      : storedLastDate;
 
-    console.log(`Last sync date: ${lastDate.toISOString()}`);
+    console.log(`Last sync date: ${lastDate.toISOString()} force=${forceRecent}`);
     console.log("Downloading Cricsheet zip...");
     const resp = await fetch(CRICSHEET_URL);
     if (!resp.ok) throw new Error(`Cricsheet fetch failed: ${resp.status}`);
@@ -336,6 +341,19 @@ Deno.serve(async (req) => {
       if (matchDate <= lastDate) continue;
       if (match.info.match_type && match.info.match_type !== "T20") continue;
 
+      await supabase.from("match_results").upsert({
+        match_id: matchId,
+        match_date: dateStr,
+        season: String(match.info.season ?? new Date(dateStr).getFullYear()),
+        venue: match.info.venue ?? "Unknown",
+        city: match.info.city ?? "",
+        team1: match.info.teams?.[0] ?? "Unknown",
+        team2: match.info.teams?.[1] ?? "Unknown",
+        winner: match.info.outcome?.winner ?? null,
+        result: match.info.outcome?.result ?? null,
+        synced_at: new Date().toISOString(),
+      });
+
       const { aggs, balls } = aggregateMatch(matchId, match);
       if (aggs.length === 0) continue;
 
@@ -366,6 +384,7 @@ Deno.serve(async (req) => {
       }
 
       // Insert balls in chunks (avoid huge payloads)
+      await supabase.from("ball_by_ball").delete().eq("match_id", matchId);
       const CHUNK = 500;
       for (let i = 0; i < balls.length; i += CHUNK) {
         const slice = balls.slice(i, i + CHUNK);
