@@ -188,6 +188,37 @@ const Simulator = () => {
                 </CardContent>
               </Card>
 
+              {playerProj && (
+                <Card className="border-2 border-accent/30 bg-accent/5">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <User className="h-4 w-4 text-accent" />
+                      Projection — {playerProj.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Runs</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.runs} />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Wickets</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.wickets} />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-card p-3">
+                      <div className="text-xs uppercase tracking-wider text-muted-foreground">Confidence</div>
+                      <div className="text-2xl font-bold tabular-nums text-accent">
+                        <AnimatedCounter value={playerProj.confidence} suffix="%" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid gap-6 md:grid-cols-2">
                 <Card>
                   <CardHeader><CardTitle className="text-base">Predicted Avg Score</CardTitle></CardHeader>
