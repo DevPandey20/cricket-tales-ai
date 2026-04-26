@@ -78,6 +78,39 @@ interface BallRow {
   season: string;
 }
 
+const teamKey = (name: string) =>
+  name.toLowerCase().replace(/\b(bengaluru|bangalore)\b/g, "rcb-city").replace(/[^a-z0-9]/g, "");
+
+const sameTeam = (a: string, b: string) => teamKey(a) === teamKey(b);
+
+function nameVariants(name: string): string[] {
+  const trimmed = name.trim();
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  const variants = new Set<string>([trimmed]);
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    const firstInitial = parts[0][0];
+    variants.add(`${firstInitial} ${last}`);
+    variants.add(`${firstInitial}${last}`);
+    variants.add(last);
+  }
+  return Array.from(variants);
+}
+
+function namesLikelyMatch(input: string, actual: string): boolean {
+  const inKey = input.toLowerCase().replace(/[^a-z]/g, "");
+  const actualKey = actual.toLowerCase().replace(/[^a-z]/g, "");
+  if (inKey === actualKey) return true;
+  return nameVariants(input).some((v) =>
+    actual.toLowerCase() === v.toLowerCase() ||
+    actualKey === v.toLowerCase().replace(/[^a-z]/g, "") ||
+    actual.toLowerCase().includes(v.toLowerCase()),
+  );
+}
+
+const daysBetween = (a: string, b: string) =>
+  Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
+
 function aggregateMatch(matchId: string, m: CricsheetMatch): {
   aggs: PlayerAgg[];
   balls: BallRow[];
@@ -191,41 +224,36 @@ async function gradePredictions(supabase: any) {
 
   let graded = 0;
   for (const p of pending) {
-    // Find match in player_match_stats — gives us actual winner indirectly.
-    // We instead look for any row matching the date + teams.
-    const { data: matchRows } = await supabase
-      .from("player_match_stats")
-      .select("match_id, own_team, opponent")
-      .eq("match_date", p.match_date)
-      .in("own_team", [p.team1, p.team2])
-      .limit(1);
-    if (!matchRows || matchRows.length === 0) continue;
+    const predictionDate = p.match_date as string;
+    const from = new Date(new Date(predictionDate).getTime() - 3 * 86_400_000).toISOString().slice(0, 10);
+    const to = new Date(new Date(predictionDate).getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const { data: resultRows } = await supabase
+      .from("match_results")
+      .select("match_id, match_date, team1, team2, winner")
+      .gte("match_date", from)
+      .lte("match_date", to)
+      .not("winner", "is", null)
+      .order("match_date", { ascending: true });
+    const result = (resultRows ?? []).find((r: any) =>
+      ((sameTeam(r.team1, p.team1) && sameTeam(r.team2, p.team2)) ||
+        (sameTeam(r.team1, p.team2) && sameTeam(r.team2, p.team1))) &&
+      daysBetween(predictionDate, r.match_date) <= 7,
+    );
+    if (!result) continue;
 
-    // Determine winner: highest team total in that match.
-    const matchId = matchRows[0].match_id;
-    const { data: allRows } = await supabase
-      .from("player_match_stats")
-      .select("own_team, runs")
-      .eq("match_id", matchId);
-    if (!allRows || allRows.length === 0) continue;
-
-    const totals: Record<string, number> = {};
-    for (const r of allRows) {
-      totals[r.own_team] = (totals[r.own_team] ?? 0) + r.runs;
-    }
-    const actualWinner =
-      (totals[p.team1] ?? 0) >= (totals[p.team2] ?? 0) ? p.team1 : p.team2;
+    const matchId = result.match_id;
+    const actualWinner = sameTeam(result.winner, p.team1) ? p.team1 : sameTeam(result.winner, p.team2) ? p.team2 : result.winner;
 
     // Player actuals
     let actualRuns: number | null = null;
     let actualWkts: number | null = null;
     if (p.player_name) {
-      const { data: pRow } = await supabase
+      const { data: playerRows } = await supabase
         .from("player_match_stats")
-        .select("runs, wickets")
+        .select("player_name, runs, wickets")
         .eq("match_id", matchId)
-        .ilike("player_name", `%${p.player_name.split(/\s+/).pop()}%`)
-        .maybeSingle();
+        .limit(80);
+      const pRow = (playerRows ?? []).find((r: any) => namesLikelyMatch(p.player_name, r.player_name));
       if (pRow) {
         actualRuns = pRow.runs;
         actualWkts = pRow.wickets;
@@ -266,17 +294,22 @@ Deno.serve(async (req) => {
   );
 
   try {
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const forceRecent = Boolean(body?.force);
     const { data: state } = await supabase
       .from("sync_state")
       .select("last_synced_date")
       .eq("key", "cricsheet_ipl")
       .maybeSingle();
 
-    const lastDate = state?.last_synced_date
+    const storedLastDate = state?.last_synced_date
       ? new Date(state.last_synced_date)
       : new Date("1900-01-01");
+    const lastDate = forceRecent
+      ? new Date(Date.now() - 75 * 86_400_000)
+      : storedLastDate;
 
-    console.log(`Last sync date: ${lastDate.toISOString()}`);
+    console.log(`Last sync date: ${lastDate.toISOString()} force=${forceRecent}`);
     console.log("Downloading Cricsheet zip...");
     const resp = await fetch(CRICSHEET_URL);
     if (!resp.ok) throw new Error(`Cricsheet fetch failed: ${resp.status}`);
@@ -308,6 +341,19 @@ Deno.serve(async (req) => {
       if (matchDate <= lastDate) continue;
       if (match.info.match_type && match.info.match_type !== "T20") continue;
 
+      await supabase.from("match_results").upsert({
+        match_id: matchId,
+        match_date: dateStr,
+        season: String(match.info.season ?? new Date(dateStr).getFullYear()),
+        venue: match.info.venue ?? "Unknown",
+        city: match.info.city ?? "",
+        team1: match.info.teams?.[0] ?? "Unknown",
+        team2: match.info.teams?.[1] ?? "Unknown",
+        winner: match.info.outcome?.winner ?? null,
+        result: match.info.outcome?.result ?? null,
+        synced_at: new Date().toISOString(),
+      });
+
       const { aggs, balls } = aggregateMatch(matchId, match);
       if (aggs.length === 0) continue;
 
@@ -338,6 +384,7 @@ Deno.serve(async (req) => {
       }
 
       // Insert balls in chunks (avoid huge payloads)
+      await supabase.from("ball_by_ball").delete().eq("match_id", matchId);
       const CHUNK = 500;
       for (let i = 0; i < balls.length; i += CHUNK) {
         const slice = balls.slice(i, i + CHUNK);

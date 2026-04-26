@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { IPL_TEAMS, AVAILABLE_PLAYERS, IPL_VENUES, getPrediction, type MatchStat, type Prediction } from "@/lib/ipl-data";
 import { getLivePlayerStats, triggerSync } from "@/lib/live-player-stats";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +10,7 @@ import { TeamTotalPredictor } from "@/components/TeamTotalPredictor";
 import { PageLayout } from "@/components/PageLayout";
 import { WinProbGauge } from "@/components/WinProbGauge";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { PlayerInput } from "@/components/PlayerInput";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { RefreshCw } from "lucide-react";
@@ -106,10 +106,6 @@ const Index = () => {
   };
 
   const team2Options = IPL_TEAMS.filter((t) => t !== team1);
-  const suggestions = player.trim().length >= 2
-    ? AVAILABLE_PLAYERS.filter((p) => p.toLowerCase().includes(player.trim().toLowerCase())).slice(0, 8)
-    : [];
-
   // Derive team-1 win % from prediction (it stores winProbability for the predicted winner)
   const team1Pct = prediction
     ? (prediction.winner === team1 ? prediction.winProbability : 100 - prediction.winProbability)
@@ -202,20 +198,11 @@ const Index = () => {
               </Select>
             </Field>
             <Field label="Player Name">
-              <Input
+              <PlayerInput
                 placeholder="e.g. Virat Kohli, Jasprit Bumrah, Rohit Sharma..."
                 value={player}
-                onChange={(e) => setPlayer(e.target.value)}
+                onChange={setPlayer}
               />
-              {suggestions.length > 0 && suggestions.length <= 8 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {suggestions.map((s) => (
-                    <Badge key={s} variant="secondary"
-                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                      onClick={() => setPlayer(s)}>{s}</Badge>
-                  ))}
-                </div>
-              )}
             </Field>
             <Button
               className="w-full text-lg font-semibold py-6 bg-secondary text-secondary-foreground hover:bg-secondary/90"
