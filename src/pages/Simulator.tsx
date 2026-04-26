@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { IPL_TEAMS, IPL_VENUES } from "@/lib/ipl-data";
+import { IPL_TEAMS, IPL_VENUES, getPrediction } from "@/lib/ipl-data";
 import { simulateMatch, type SimResult } from "@/lib/match-simulator";
+import { getLivePlayerStats } from "@/lib/live-player-stats";
 import { WinProbGauge } from "@/components/WinProbGauge";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { PlayerInput } from "@/components/PlayerInput";
 import {
   ResponsiveContainer,
   LineChart,
@@ -19,7 +21,7 @@ import {
   Area,
   CartesianGrid,
 } from "recharts";
-import { Activity } from "lucide-react";
+import { Activity, User } from "lucide-react";
 
 const Simulator = () => {
   const [team1, setTeam1] = useState("");
