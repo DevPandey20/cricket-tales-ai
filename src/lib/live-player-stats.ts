@@ -62,11 +62,13 @@ export async function getLivePlayerStats(
   playerName: string,
 ): Promise<MatchStat[] | null> {
   const variants = nameVariants(playerName);
+  const lastName = playerName.trim().split(/\s+/).pop() ?? playerName.trim();
 
-  // Search DB by all name variants
+  // Search DB by all name variants first, then a last-name fallback for
+  // Cricsheet abbreviations like "V Kohli" vs UI names like "Virat Kohli".
   let dbStats: MatchStat[] = [];
   try {
-    const { data, error } = await supabase
+    const exact = await supabase
       .from("player_match_stats")
       .select(
         "player_name, own_team, opponent, runs, balls, wickets, economy, venue, city, match_date, season",
@@ -74,7 +76,19 @@ export async function getLivePlayerStats(
       .in("player_name", variants)
       .order("match_date", { ascending: false })
       .limit(60);
-    if (!error && data) dbStats = (data as DbRow[]).map(rowToStat);
+    if (!exact.error && exact.data) dbStats = (exact.data as DbRow[]).map(rowToStat);
+
+    if (dbStats.length < 5 && lastName.length >= 3) {
+      const fuzzy = await supabase
+        .from("player_match_stats")
+        .select(
+          "player_name, own_team, opponent, runs, balls, wickets, economy, venue, city, match_date, season",
+        )
+        .ilike("player_name", `%${lastName}%`)
+        .order("match_date", { ascending: false })
+        .limit(60);
+      if (!fuzzy.error && fuzzy.data) dbStats = [...dbStats, ...(fuzzy.data as DbRow[]).map(rowToStat)];
+    }
   } catch (e) {
     console.warn("Live stats fetch failed, falling back to hardcoded:", e);
   }
