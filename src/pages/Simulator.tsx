@@ -29,6 +29,8 @@ const Simulator = () => {
   const [venue, setVenue] = useState("");
   const [battingFirst, setBattingFirst] = useState("");
   const [iterations, setIterations] = useState(800);
+  const [focusPlayer, setFocusPlayer] = useState("");
+  const [playerProj, setPlayerProj] = useState<{ name: string; runs: number; wickets: number; confidence: number } | null>(null);
   const [result, setResult] = useState<SimResult | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -40,10 +42,21 @@ const Simulator = () => {
   const run = async () => {
     if (!canRun) return;
     setRunning(true);
+    setPlayerProj(null);
     // tiny defer so spinner shows
     await new Promise((r) => setTimeout(r, 30));
     const r = simulateMatch(team1, team2, venue, iterations, battingFirst);
     setResult(r);
+    if (focusPlayer.trim()) {
+      const stats = await getLivePlayerStats(focusPlayer);
+      const pred = getPrediction(team1, team2, focusPlayer, venue, stats);
+      setPlayerProj({
+        name: focusPlayer.trim(),
+        runs: pred.playerRuns,
+        wickets: pred.playerWickets,
+        confidence: pred.confidence,
+      });
+    }
     setRunning(false);
   };
 
